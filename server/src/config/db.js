@@ -1,17 +1,31 @@
 import mongoose from "mongoose";
 
-async function connectDB() {
-  const uri = process.env.MONGODB_URI;
+let connectionPromise = null;
 
-  if (!uri) {
-    throw new Error("MONGODB_URI is missing from server/.env");
+export default async function connectDB() {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
   }
 
-  await mongoose.connect(uri, {
-    dbName: "skillbridge",
-  });
+  if (!process.env.MONGODB_URI) {
+    throw new Error("MONGODB_URI is required.");
+  }
 
-  console.log("MongoDB connected: skillbridge");
+  if (!connectionPromise) {
+    connectionPromise = mongoose
+      .connect(process.env.MONGODB_URI, {
+        dbName: "skillbridge",
+        maxPoolSize: 5,
+        serverSelectionTimeoutMS: 10000,
+      })
+      .then(() => {
+        console.log("MongoDB connected: skillbridge");
+        return mongoose.connection;
+      })
+      .finally(() => {
+        connectionPromise = null;
+      });
+  }
+
+  return connectionPromise;
 }
-
-export default connectDB;

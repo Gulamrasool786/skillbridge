@@ -1,7 +1,16 @@
+import "dotenv/config";
 import express from "express";
+
+import connectDB from "./config/db.js";
+import sessionMiddleware from "./config/session.js";
+
+import User from "./models/User.js";
+import FreelancerProfile from "./models/FreelancerProfile.js";
+import Conversation from "./models/Conversation.js";
+import Message from "./models/Message.js";
+
 import projectRoutes from "./routes/projectRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
-import sessionMiddleware from "./config/session.js";
 import freelancerProfileRoutes from "./routes/freelancerProfileRoutes.js";
 import talentRoutes from "./routes/talentRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
@@ -16,10 +25,43 @@ if (process.env.NODE_ENV === "production") {
 
 app.use(express.json({ limit: "20kb" }));
 
-// Authenticated API responses must not be cached by a CDN.
 app.use("/api", (req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
+});
+
+let initializationPromise = null;
+
+async function initializeDatabase() {
+  await connectDB();
+
+  if (!initializationPromise) {
+    initializationPromise = Promise.all([
+      User.init(),
+      FreelancerProfile.init(),
+      Conversation.init(),
+      Message.init(),
+    ]).catch((error) => {
+      initializationPromise = null;
+      throw error;
+    });
+  }
+
+  await initializationPromise;
+}
+
+app.use(async (req, res, next) => {
+  try {
+    await initializeDatabase();
+    next();
+  } catch (error) {
+    console.error("Database initialization failed:", error.message);
+
+    return res.status(503).json({
+      success: false,
+      message: "The database is temporarily unavailable.",
+    });
+  }
 });
 
 app.use(sessionMiddleware);
